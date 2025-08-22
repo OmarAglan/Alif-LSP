@@ -27,38 +27,38 @@ void test_getCurrentWord_beginningOfLine() {
 }
 
 void test_getCurrentWord_middleOfWord() {
-    docManager.openDocument(TEST_URI, SIMPLE_DOC);
-    // Position in middle of "دالة" (at character 2)
-    std::string result = completionEngine.getCurrentWord(TEST_URI, 0, 2);
-    TestFramework::assert_equal("دا", result, "getCurrentWord in middle of word");
+	docManager.openDocument(TEST_URI, SIMPLE_DOC);
+	// Position in middle of "دالة" (Arabic chars are 2 bytes each, so pos 4 = after 2nd char)
+	std::string result = completionEngine.getCurrentWord(TEST_URI, 0, 4);
+	TestFramework::assert_equal("دا", result, "getCurrentWord in middle of word");
 }
 
 void test_getCurrentWord_endOfWord() {
-    docManager.openDocument(TEST_URI, SIMPLE_DOC);
-    // Position at end of "دالة" (at character 4)
-    std::string result = completionEngine.getCurrentWord(TEST_URI, 0, 4);
-    TestFramework::assert_equal("دالة", result, "getCurrentWord at end of word");
+	docManager.openDocument(TEST_URI, SIMPLE_DOC);
+	// Position at end of "دالة" (Arabic "دالة" is 8 bytes)
+	std::string result = completionEngine.getCurrentWord(TEST_URI, 0, 8);
+	TestFramework::assert_equal("دالة", result, "getCurrentWord at end of word");
 }
 
 void test_getCurrentWord_afterSpace() {
-    docManager.openDocument(TEST_URI, SIMPLE_DOC);
-    // Position after space, before "اختبار" (at character 5)
-    std::string result = completionEngine.getCurrentWord(TEST_URI, 0, 5);
-    TestFramework::assert_equal("", result, "getCurrentWord after space");
+	docManager.openDocument(TEST_URI, SIMPLE_DOC);
+	// Position after space, before "اختبار" (space is at byte 8, so position 9)
+	std::string result = completionEngine.getCurrentWord(TEST_URI, 0, 9);
+	TestFramework::assert_equal("", result, "getCurrentWord after space");
 }
 
 void test_getCurrentWord_partialSecondWord() {
-    docManager.openDocument(TEST_URI, SIMPLE_DOC);
-    // Position in middle of "اختبار" (at character 7)
-    std::string result = completionEngine.getCurrentWord(TEST_URI, 0, 7);
-    TestFramework::assert_equal("اخ", result, "getCurrentWord in partial second word");
+	docManager.openDocument(TEST_URI, SIMPLE_DOC);
+	// Position in middle of "اختبار" (after 2 chars = 9 + 4 = 13)
+	std::string result = completionEngine.getCurrentWord(TEST_URI, 0, 13);
+	TestFramework::assert_equal("اخ", result, "getCurrentWord in partial second word");
 }
 
 void test_getCurrentWord_multiline() {
-    docManager.openDocument(TEST_URI, MULTILINE_DOC);
-    // Position in "ارجع" on line 2 (at character 6)
-    std::string result = completionEngine.getCurrentWord(TEST_URI, 2, 6);
-    TestFramework::assert_equal("ارجع", result, "getCurrentWord in multiline document");
+	docManager.openDocument(TEST_URI, MULTILINE_DOC);
+	// Position at end of "ارجع" on line 2 (4 spaces + 8 bytes = position 12)
+	std::string result = completionEngine.getCurrentWord(TEST_URI, 2, 12);
+	TestFramework::assert_equal("ارجع", result, "getCurrentWord in multiline document");
 }
 
 void test_getSuggestions_emptyDocument() {
