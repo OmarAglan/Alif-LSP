@@ -9,14 +9,41 @@ SRC_DIR = ../src
 INCLUDE_DIR = $(SRC_DIR)/include
 THIRD_PARTY_DIR = $(SRC_DIR)/third-party
 
-# اسم الملف التنفيذي النهائي
-TARGET = alif-lsp
+# اسم الملف التنفيذي النهائي (سيتم إضافة لاحقة المعمارية)
+TARGET_BASE = alif-lsp
+TARGET = $(TARGET_BASE)$(TARGET_SUFFIX)
 
 # مجلد الإخراج
 BUILD_DIR = build
 
 # إعدادات المترجم
 CXXFLAGS = -std=c++17 -Wall -Wextra -I$(INCLUDE_DIR) -I$(THIRD_PARTY_DIR)
+
+# معمارية الهدف (يمكن تخصيصها)
+ARCH ?= native
+
+# إعدادات المعمارية
+ifeq ($(ARCH),x86_64)
+    ARCH_FLAGS = -m64
+    TARGET_SUFFIX = _x64
+else ifeq ($(ARCH),i386)
+    ARCH_FLAGS = -m32
+    TARGET_SUFFIX = _x32
+else ifeq ($(ARCH),aarch64)
+    ARCH_FLAGS = -march=armv8-a
+    TARGET_SUFFIX = _arm64
+else ifeq ($(ARCH),armv7)
+    ARCH_FLAGS = -march=armv7-a -mfpu=neon
+    TARGET_SUFFIX = _armv7
+else ifeq ($(ARCH),native)
+    ARCH_FLAGS = -march=native
+    TARGET_SUFFIX = 
+else
+    $(error Unsupported architecture: $(ARCH))
+endif
+
+# إضافة راجات المعمارية للمترجم
+CXXFLAGS += $(ARCH_FLAGS)
 
 # إعدادات لوضع التصحيح
 DEBUG_FLAGS = -g -O0 -DDEBUG
@@ -78,7 +105,19 @@ help:
 	@echo "  clean    - Remove all build files"
 	@echo "  help     - Show this help message"
 	@echo ""
+	@echo "Supported architectures (ARCH variable):"
+	@echo "  native   - Native architecture (default, optimized for current CPU)"
+	@echo "  x86_64   - 64-bit x86 architecture"
+	@echo "  i386     - 32-bit x86 architecture"
+	@echo "  aarch64  - 64-bit ARM architecture (ARM64)"
+	@echo "  armv7    - 32-bit ARMv7 architecture"
+	@echo ""
 	@echo "Usage examples:"
-	@echo "  make         # Build release version"
-	@echo "  make debug   # Build debug version"
-	@echo "  make clean   # Clean all files"
+	@echo "  make                    # Build release version (native)"
+	@echo "  make debug              # Build debug version (native)"
+	@echo "  make ARCH=x86_64        # Build for 64-bit x86"
+	@echo "  make ARCH=aarch64       # Build for ARM64"
+	@echo "  make ARCH=i386 debug    # Build 32-bit debug version"
+	@echo "  make clean              # Clean all files"
+	@echo ""
+	@echo "Output binary will be named: $(TARGET_BASE)[_suffix]"
