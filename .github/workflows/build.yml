@@ -1,0 +1,29 @@
+name: C++ CI
+
+on:
+  push:
+    branches: [ "main", "master" ]
+  pull_request:
+    branches: [ "main", "master" ]
+
+jobs:
+  build:
+    name: Build on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    
+    # هنشغل البناء على ويندوز ولينكس في نفس الوقت
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Configure CMake
+      # إعداد CMake وإنشاء مجلد build
+      run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+
+    - name: Build Project
+      # بناء المشروع الفعلي
+      run: cmake --build build --config Release
