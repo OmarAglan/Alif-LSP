@@ -40,20 +40,21 @@ void LSPServer::sendErrorResponse(const json& id, int code, const std::string& m
 	Logger::warn("Error response sent: " + message);
 }
 
-void LSPServer::initialize(const json& params) {
+void LSPServer::initialize(const json& params, const json& id) {
 	json capabilities = {
 		{"completionProvider", {
-			{"triggerCharacters", true}
+			// triggerCharacters MUST be an array of strings
+			{"triggerCharacters", json::array({".", " ", "\n"})} 
 		}},
 		{"textDocumentSync", 1} // Full sync
 	};
 
 	sendResponse({
-		{"id", 1},
-			{"result", {
-				{"capabilities", capabilities}
-			}},
-		});
+		{"id", id}, // Echo the exact ID sent by Neovim
+		{"result", {
+			{"capabilities", capabilities}
+		}}
+	});
 }
 
 void LSPServer::handleCompletion(const json& params, const json& id) {
@@ -128,7 +129,20 @@ void LSPServer::handleMessage(const json& msg) {
 			sendErrorResponse(msg["id"], -32602, "Initialize request missing params");
 			return;
 		}
-		initialize(msg["params"]);
+		// Pass both params and id
+		initialize(msg["params"], msg["id"]);
+	}
+
+	else if (method == "shutdown") {
+		// Neovim is asking the server to shut down. We must return a null result.
+		if (msg.contains("id")) {
+			sendResponse({ {"id", msg["id"]}, {"result", nullptr} });
+		}
+	}
+	else if (method == "exit") {
+		// Neovim is telling the process to exit.
+		Logger::info("Received exit notification. Shutting down.");
+		std::exit(0);
 	}
 	// معالجة فتح مستند
 	else if (method == "textDocument/didOpen") {
@@ -277,7 +291,9 @@ int LSPServer::run() {
 		bool contentLengthFound = false;
 
 		// قراءة الرؤوس حتى الوصول لسطر فارغ
+		bool headerRead = false;
 		while (std::getline(std::cin, line)) {
+			headerRead = true;
 			// إزالة الأحرف الإضافية من نهاية السطر
 			if (!line.empty() && line.back() == '\r') {
 				line.pop_back();
@@ -314,6 +330,12 @@ int LSPServer::run() {
 			if (line.empty()) {
 				break;
 			}
+		}
+
+		// If we couldn't read any headers, the input stream is likely closed (Neovim exited)
+		if (!headerRead && std::cin.eof()) {
+			Logger::info("End of input stream reached. Exiting.");
+			break;
 		}
 
 		// التحقق من وجود رأس Content-Length
