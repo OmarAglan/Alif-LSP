@@ -1,0 +1,10 @@
+BasedOnStyle: LLVM
+IndentWidth: 4
+UseTab: ForIndentation
+ColumnLimit: 120
+AlignConsecutiveAssignments: true
+AlignConsecutiveDeclarations: true
+AllowShortFunctionsOnASingleLine: Empty
+BreakBeforeBraces: Attach
+PointerAlignment: Left
+ReflowComments: false
