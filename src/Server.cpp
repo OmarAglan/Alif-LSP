@@ -44,7 +44,8 @@ void LSPServer::initialize(const json& params, const json& id) {
 	};
 
 	sendResponse({
-		{"id", id}, // Echo the exact ID sent by Neovim
+		{"jsonrpc", "2.0"},
+		{"id", id},
 		{"result", {
 			{"capabilities", capabilities}
 		}}
@@ -94,7 +95,7 @@ void LSPServer::handleCompletion(const json& params, const json& id) {
 
 	try {
 		json result = completionEngine_.getSuggestions();
-		sendResponse({ {"id", id}, {"result", result} });
+		sendResponse({ {"jsonrpc", "2.0"}, {"id", id}, {"result", result} });
 		Logger::debug("Completion request processed successfully for: " + uri);
 	}
 	catch (const std::exception& e) {
@@ -130,7 +131,7 @@ void LSPServer::handleMessage(const json& msg) {
 	else if (method == "shutdown") {
 		// Neovim is asking the server to shut down. We must return a null result.
 		if (msg.contains("id")) {
-			sendResponse({ {"id", msg["id"]}, {"result", nullptr} });
+			sendResponse({ {"jsonrpc", "2.0"}, {"id", msg["id"]}, {"result", nullptr} });
 		}
 	}
 	else if (method == "exit") {
