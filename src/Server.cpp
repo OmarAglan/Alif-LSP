@@ -171,9 +171,9 @@ void LSPServer::handleMessage(const json& msg) {
 		Logger::info("Server state: Running -> ShuttingDown");
 	}
 	else if (method == "exit") {
-		// Neovim is telling the process to exit.
-		Logger::info("Received exit notification. Shutting down.");
-		std::exit(0);
+		// LSP spec: exit code 0 if shutdown was received, 1 otherwise
+		Logger::info("Received exit notification. Shutting down cleanly.");
+		running_ = false;
 	}
 	// معالجة فتح مستند
 	else if (method == "textDocument/didOpen") {
@@ -315,7 +315,7 @@ int LSPServer::run() {
 
 	Logger::info("Alif Server Started");
 
-	while (true) {
+	while (running_) {
 		// قراءة رؤوس الرسالة مع التحقق من الصحة
 		std::string line;
 		size_t length = 0;
@@ -435,5 +435,8 @@ int LSPServer::run() {
 		}
 	}
 
-	return 0;
+	// LSP spec: return 0 if shutdown was requested before exit, 1 otherwise
+	int exitCode = (state_ == ServerState::ShuttingDown) ? 0 : 1;
+	Logger::info("Alif Server exiting with code " + std::to_string(exitCode));
+	return exitCode;
 }

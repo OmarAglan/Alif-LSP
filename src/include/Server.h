@@ -22,6 +22,7 @@ public:
 private:
 	// Server lifecycle state
 	ServerState state_ = ServerState::Uninitialized;
+	bool running_ = true;  // controls the main loop — false triggers clean exit
 
 	// Server-owned components (no globals)
 	DocumentManager docManager_;
