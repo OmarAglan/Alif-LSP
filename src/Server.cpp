@@ -72,8 +72,11 @@ void LSPServer::handleInitialize(const json& params, const json& id) {
 
 	json capabilities = {
 		{"completionProvider", {
-			// triggerCharacters MUST be an array of strings
-			{"triggerCharacters", json::array({".", " ", "\n"})} 
+			{"triggerCharacters", json::array({
+				".", 
+				"ا", "ب", "ت", "ث", "ج", "ح", "خ", "د", "ذ", "ر", "ز", "س", "ش", "ص", "ض", "ط", "ظ", "ع", "غ", "ف", "ق", "ك", "ل", "م", "ن", "ه", "و", "ي",
+				"أ", "إ", "آ", "ة", "ى", "ئ", "ء", "ؤ"
+			})} 
 		}},
 		{"textDocumentSync", 1} // Full sync
 	};
