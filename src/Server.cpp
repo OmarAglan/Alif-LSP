@@ -34,7 +34,35 @@ void LSPServer::sendErrorResponse(const json& id, int code, const std::string& m
 	Logger::warn("Error response sent: " + message);
 }
 
-void LSPServer::initialize(const json& params, const json& id) {
+// --- Constructor & dispatch table registration ---
+
+LSPServer::LSPServer() {
+	registerHandlers();
+}
+
+void LSPServer::registerHandlers() {
+	// Request handlers (client expects a response with matching id)
+	requestHandlers_["initialize"]              = [this](const json& p, const json& id) { handleInitialize(p, id); };
+	requestHandlers_["shutdown"]                 = [this](const json& p, const json& id) { handleShutdown(p, id); };
+	requestHandlers_["textDocument/completion"]  = [this](const json& p, const json& id) { handleCompletion(p, id); };
+
+	// Notification handlers (no response expected)
+	notificationHandlers_["initialized"]             = [this](const json& p) { handleInitialized(p); };
+	notificationHandlers_["exit"]                     = [this](const json& p) { handleExit(p); };
+	notificationHandlers_["textDocument/didOpen"]     = [this](const json& p) { handleDidOpen(p); };
+	notificationHandlers_["textDocument/didChange"]   = [this](const json& p) { handleDidChange(p); };
+	notificationHandlers_["textDocument/didClose"]    = [this](const json& p) { handleDidClose(p); };
+}
+
+// --- Request handlers ---
+
+void LSPServer::handleInitialize(const json& params, const json& id) {
+	if (state_ != ServerState::Uninitialized) {
+		Logger::warn("Duplicate initialize request rejected");
+		sendErrorResponse(id, -32600, "Server already initialized");
+		return;
+	}
+
 	json capabilities = {
 		{"completionProvider", {
 			// triggerCharacters MUST be an array of strings
@@ -50,6 +78,15 @@ void LSPServer::initialize(const json& params, const json& id) {
 			{"capabilities", capabilities}
 		}}
 	});
+
+	state_ = ServerState::Running;
+	Logger::info("Server state: Uninitialized -> Running");
+}
+
+void LSPServer::handleShutdown(const json& params, const json& id) {
+	sendResponse({ {"jsonrpc", "2.0"}, {"id", id}, {"result", nullptr} });
+	state_ = ServerState::ShuttingDown;
+	Logger::info("Server state: Running -> ShuttingDown");
 }
 
 void LSPServer::handleCompletion(const json& params, const json& id) {
@@ -104,6 +141,80 @@ void LSPServer::handleCompletion(const json& params, const json& id) {
 	}
 }
 
+// --- Notification handlers ---
+
+void LSPServer::handleInitialized(const json& params) {
+	Logger::info("Client confirmed initialization — server fully operational");
+}
+
+void LSPServer::handleExit(const json& params) {
+	Logger::info("Received exit notification. Shutting down cleanly.");
+	running_ = false;
+}
+
+void LSPServer::handleDidOpen(const json& params) {
+	if (!params.contains("textDocument")) {
+		Logger::warn("didOpen notification missing textDocument");
+		return;
+	}
+	auto doc = params["textDocument"];
+	if (!doc.contains("uri") || !doc.contains("text") ||
+		!doc["uri"].is_string() || !doc["text"].is_string()) {
+		Logger::warn("didOpen notification has invalid textDocument structure");
+		return;
+	}
+	DocumentError result = docManager_.openDocument(doc["uri"], doc["text"]);
+	if (result != DocumentError::SUCCESS) {
+		Logger::warn("Failed to open document " + doc["uri"].get<std::string>() +
+			": " + DocumentManager::errorToString(result));
+	}
+}
+
+void LSPServer::handleDidChange(const json& params) {
+	if (!params.contains("textDocument") || !params.contains("contentChanges")) {
+		Logger::warn("didChange notification missing required parameters");
+		return;
+	}
+	auto doc = params["textDocument"];
+	auto changes = params["contentChanges"];
+
+	if (!doc.contains("uri") || !doc["uri"].is_string() ||
+		!changes.is_array() || changes.empty()) {
+		Logger::warn("didChange notification has invalid structure");
+		return;
+	}
+
+	if (!changes[0].contains("text") || !changes[0]["text"].is_string()) {
+		Logger::warn("didChange notification has invalid content changes");
+		return;
+	}
+
+	DocumentError result = docManager_.updateDocument(doc["uri"], changes[0]["text"]);
+	if (result != DocumentError::SUCCESS) {
+		Logger::warn("Failed to update document " + doc["uri"].get<std::string>() +
+			": " + DocumentManager::errorToString(result));
+	}
+}
+
+void LSPServer::handleDidClose(const json& params) {
+	if (!params.contains("textDocument")) {
+		Logger::warn("didClose notification missing textDocument");
+		return;
+	}
+	auto doc = params["textDocument"];
+	if (!doc.contains("uri") || !doc["uri"].is_string()) {
+		Logger::warn("didClose notification has invalid textDocument structure");
+		return;
+	}
+	DocumentError result = docManager_.closeDocument(doc["uri"]);
+	if (result != DocumentError::SUCCESS) {
+		Logger::warn("Failed to close document " + doc["uri"].get<std::string>() +
+			": " + DocumentManager::errorToString(result));
+	}
+}
+
+// --- Message dispatch ---
+
 void LSPServer::handleMessage(const json& msg) {
 	// التحقق من وجود حقل method
 	if (!msg.contains("method") || !msg["method"].is_string()) {
@@ -133,126 +244,30 @@ void LSPServer::handleMessage(const json& msg) {
 		return;
 	}
 
-	// --- Method dispatch ---
-
-	// معالجة طلب التهيئة
-	if (method == "initialize") {
-		if (state_ != ServerState::Uninitialized) {
-			Logger::warn("Duplicate initialize request rejected");
-			if (msg.contains("id")) {
-				sendErrorResponse(msg["id"], -32600, "Server already initialized");
-			}
+	// --- Dispatch via tables ---
+	// Check if it's a request (has "id" field)
+	if (msg.contains("id")) {
+		auto it = requestHandlers_.find(method);
+		if (it != requestHandlers_.end()) {
+			json params = msg.contains("params") ? msg["params"] : json::object();
+			it->second(params, msg["id"]);
 			return;
 		}
-		if (!msg.contains("id")) {
-			Logger::warn("Initialize request missing id field");
-			return;
-		}
-		if (!msg.contains("params")) {
-			sendErrorResponse(msg["id"], -32602, "Initialize request missing params");
-			return;
-		}
-		initialize(msg["params"], msg["id"]);
-		state_ = ServerState::Running;
-		Logger::info("Server state: Uninitialized -> Running");
+		// Unknown request method — respond with method not found
+		sendErrorResponse(msg["id"], -32601, "Method not found: " + method);
+		return;
 	}
 
-	// إشعار initialized من العميل
-	else if (method == "initialized") {
-		Logger::info("Client confirmed initialization — server fully operational");
+	// It's a notification (no "id")
+	auto it = notificationHandlers_.find(method);
+	if (it != notificationHandlers_.end()) {
+		json params = msg.contains("params") ? msg["params"] : json::object();
+		it->second(params);
+		return;
 	}
 
-	else if (method == "shutdown") {
-		// Neovim is asking the server to shut down. We must return a null result.
-		if (msg.contains("id")) {
-			sendResponse({ {"jsonrpc", "2.0"}, {"id", msg["id"]}, {"result", nullptr} });
-		}
-		state_ = ServerState::ShuttingDown;
-		Logger::info("Server state: Running -> ShuttingDown");
-	}
-	else if (method == "exit") {
-		// LSP spec: exit code 0 if shutdown was received, 1 otherwise
-		Logger::info("Received exit notification. Shutting down cleanly.");
-		running_ = false;
-	}
-	// معالجة فتح مستند
-	else if (method == "textDocument/didOpen") {
-		if (!msg.contains("params") || !msg["params"].contains("textDocument")) {
-			Logger::warn("didOpen request missing required parameters");
-			return;
-		}
-		auto doc = msg["params"]["textDocument"];
-		if (!doc.contains("uri") || !doc.contains("text") ||
-			!doc["uri"].is_string() || !doc["text"].is_string()) {
-			Logger::warn("didOpen request has invalid textDocument structure");
-			return;
-		}
-		DocumentError result = docManager_.openDocument(doc["uri"], doc["text"]);
-		if (result != DocumentError::SUCCESS) {
-			Logger::warn("Failed to open document " + doc["uri"].get<std::string>() +
-				": " + DocumentManager::errorToString(result));
-		}
-	}
-	// معالجة تحديث مستند
-	else if (method == "textDocument/didChange") {
-		if (!msg.contains("params") || !msg["params"].contains("textDocument") ||
-			!msg["params"].contains("contentChanges")) {
-			Logger::warn("didChange request missing required parameters");
-			return;
-		}
-		auto doc = msg["params"]["textDocument"];
-		auto changes = msg["params"]["contentChanges"];
-
-		if (!doc.contains("uri") || !doc["uri"].is_string() ||
-			!changes.is_array() || changes.empty()) {
-			Logger::warn("didChange request has invalid structure");
-			return;
-		}
-
-		if (!changes[0].contains("text") || !changes[0]["text"].is_string()) {
-			Logger::warn("didChange request has invalid content changes");
-			return;
-		}
-
-		DocumentError result = docManager_.updateDocument(doc["uri"], changes[0]["text"]);
-		if (result != DocumentError::SUCCESS) {
-			Logger::warn("Failed to update document " + doc["uri"].get<std::string>() +
-				": " + DocumentManager::errorToString(result));
-		}
-	}
-	// معالجة إغلاق مستند
-	else if (method == "textDocument/didClose") {
-		if (!msg.contains("params") || !msg["params"].contains("textDocument")) {
-			Logger::warn("didClose request missing required parameters");
-			return;
-		}
-		auto doc = msg["params"]["textDocument"];
-		if (!doc.contains("uri") || !doc["uri"].is_string()) {
-			Logger::warn("didClose request has invalid textDocument structure");
-			return;
-		}
-		DocumentError result = docManager_.closeDocument(doc["uri"]);
-		if (result != DocumentError::SUCCESS) {
-			Logger::warn("Failed to close document " + doc["uri"].get<std::string>() +
-				": " + DocumentManager::errorToString(result));
-		}
-	}
-	// معالجة طلب الإكمال التلقائي
-	else if (method == "textDocument/completion") {
-		if (!msg.contains("id")) {
-			Logger::warn("Completion request missing id field");
-			return;
-		}
-		if (!msg.contains("params")) {
-			sendErrorResponse(msg["id"], -32602, "Completion request missing params");
-			return;
-		}
-		handleCompletion(msg["params"], msg["id"]);
-	}
-	// طرق غير مدعومة
-	else {
-		Logger::debug("Unsupported method: " + method);
-	}
+	// Unknown notification — just log it
+	Logger::debug("Unsupported notification: " + method);
 }
 
 // التحقق من صحة بنية رسالة LSP الأساسية

@@ -1,5 +1,7 @@
 #pragma once
 #include <string>
+#include <functional>
+#include <unordered_map>
 #include "json.hpp"
 #include "Logger.h"
 #include "DocManager.h"
@@ -14,23 +16,48 @@ enum class ServerState {
 	ShuttingDown    // بعد استلام طلب shutdown
 };
 
+// Handler types for dispatch table
+// Requests have an id and expect a response
+using RequestHandler = std::function<void(const json& params, const json& id)>;
+// Notifications are fire-and-forget (no id, no response)
+using NotificationHandler = std::function<void(const json& params)>;
+
 class LSPServer {
 public:
+	LSPServer();
 	int run();
 	void handleMessage(const json& msg);
 
 private:
 	// Server lifecycle state
 	ServerState state_ = ServerState::Uninitialized;
-	bool running_ = true;  // controls the main loop — false triggers clean exit
+	bool running_ = true;
 
-	// Server-owned components (no globals)
+	// Server-owned components
 	DocumentManager docManager_;
 	Completion completionEngine_;
 
+	// --- Dispatch tables ---
+	std::unordered_map<std::string, RequestHandler> requestHandlers_;
+	std::unordered_map<std::string, NotificationHandler> notificationHandlers_;
+	void registerHandlers();
+
+	// --- Transport ---
 	void sendResponse(const json& response);
 	void sendErrorResponse(const json& id, int code, const std::string& message);
-	void initialize(const json& params, const json& id);
+
+	// --- Request handlers (expect a response) ---
+	void handleInitialize(const json& params, const json& id);
+	void handleShutdown(const json& params, const json& id);
 	void handleCompletion(const json& params, const json& id);
+
+	// --- Notification handlers (no response) ---
+	void handleInitialized(const json& params);
+	void handleExit(const json& params);
+	void handleDidOpen(const json& params);
+	void handleDidChange(const json& params);
+	void handleDidClose(const json& params);
+
+	// --- Validation ---
 	bool isValidLSPMessage(const json& msg);
 };
