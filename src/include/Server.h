@@ -48,6 +48,8 @@ private:
 	// --- Transport ---
 	void sendResponse(const json& response);
 	void sendErrorResponse(const json& id, int code, const std::string& message);
+	void sendNotification(const std::string& method, const json& params);
+	void publishDiagnostics(const std::string& uri, const json& diagnostics);
 
 	// --- Request handlers (expect a response) ---
 	void handleInitialize(const json& params, const json& id);

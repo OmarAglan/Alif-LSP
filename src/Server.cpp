@@ -24,6 +24,22 @@ void LSPServer::sendErrorResponse(const json& id, int code, const std::string& m
 	Logger::warn("Error response sent: " + message);
 }
 
+void LSPServer::sendNotification(const std::string& method, const json& params) {
+	json notification = {
+		{"jsonrpc", "2.0"},
+		{"method", method},
+		{"params", params}
+	};
+	sendResponse(notification);
+}
+
+void LSPServer::publishDiagnostics(const std::string& uri, const json& diagnostics) {
+	sendNotification("textDocument/publishDiagnostics", {
+		{"uri", uri},
+		{"diagnostics", diagnostics}
+	});
+}
+
 // --- Constructor & dispatch table registration ---
 
 LSPServer::LSPServer(std::shared_ptr<Transport> transport)
