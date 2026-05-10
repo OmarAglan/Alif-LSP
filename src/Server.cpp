@@ -86,8 +86,7 @@ void LSPServer::handleInitialize(const json& params, const json& id) {
 		}}
 	});
 
-	state_ = ServerState::Running;
-	Logger::info("Server state: Uninitialized -> Running");
+	Logger::info("Server state: Uninitialized -> Waiting for 'initialized' notification");
 }
 
 void LSPServer::handleShutdown(const json& params, const json& id) {
@@ -156,7 +155,8 @@ void LSPServer::handleCompletion(const json& params, const json& id) {
 // --- Notification handlers ---
 
 void LSPServer::handleInitialized(const json& params) {
-	Logger::info("Client confirmed initialization — server fully operational");
+	state_ = ServerState::Running;
+	Logger::info("Client confirmed initialization — server fully operational (State -> Running)");
 }
 
 void LSPServer::handleExit(const json& params) {
