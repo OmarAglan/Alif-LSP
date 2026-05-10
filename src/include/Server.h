@@ -61,6 +61,7 @@ private:
 	void handleDidChange(const json& params);
 	void handleDidClose(const json& params);
 
-	// --- Validation ---
+	// --- Helpers ---
+	json getCapabilities() const;
 	bool isValidLSPMessage(const json& msg);
 };

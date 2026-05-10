@@ -24,6 +24,15 @@ void LSPServer::sendErrorResponse(const json& id, int code, const std::string& m
 	Logger::warn("Error response sent: " + message);
 }
 
+json LSPServer::getCapabilities() const {
+	return {
+		{"completionProvider", {
+			{"triggerCharacters", json::array({".", " "})} 
+		}},
+		{"textDocumentSync", 1} // Full sync
+	};
+}
+
 void LSPServer::sendNotification(const std::string& method, const json& params) {
 	json notification = {
 		{"jsonrpc", "2.0"},
@@ -70,19 +79,11 @@ void LSPServer::handleInitialize(const json& params, const json& id) {
 		return;
 	}
 
-	json capabilities = {
-		{"completionProvider", {
-			// triggerCharacters MUST be an array of strings
-			{"triggerCharacters", json::array({".", " "})} 
-		}},
-		{"textDocumentSync", 1} // Full sync
-	};
-
 	sendResponse({
 		{"jsonrpc", "2.0"},
 		{"id", id},
 		{"result", {
-			{"capabilities", capabilities},
+			{"capabilities", getCapabilities()},
 			{"serverInfo", {
 				{"name", "Alif-LSP"},
 				{"version", "0.0.1"}
