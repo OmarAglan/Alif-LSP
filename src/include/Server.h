@@ -7,12 +7,22 @@
 
 using json = nlohmann::json;
 
+// حالات دورة حياة خادم LSP
+enum class ServerState {
+	Uninitialized,  // قبل استلام طلب initialize
+	Running,        // بعد initialize/initialized — التشغيل العادي
+	ShuttingDown    // بعد استلام طلب shutdown
+};
+
 class LSPServer {
 public:
 	int run();
 	void handleMessage(const json& msg);
 
 private:
+	// Server lifecycle state
+	ServerState state_ = ServerState::Uninitialized;
+
 	// Server-owned components (no globals)
 	DocumentManager docManager_;
 	Completion completionEngine_;

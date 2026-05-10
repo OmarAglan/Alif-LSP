@@ -114,8 +114,36 @@ void LSPServer::handleMessage(const json& msg) {
 	std::string method = msg["method"].get<std::string>();
 	Logger::debug("Processing method: " + method);
 
+	// --- Lifecycle gating ---
+	// في حالة عدم التهيئة: فقط initialize و exit مسموح بهما
+	if (state_ == ServerState::Uninitialized && method != "initialize" && method != "exit") {
+		Logger::warn("Rejected method before initialization: " + method);
+		if (msg.contains("id")) {
+			sendErrorResponse(msg["id"], -32002, "Server not yet initialized");
+		}
+		return;
+	}
+
+	// في حالة إيقاف التشغيل: فقط exit مسموح به
+	if (state_ == ServerState::ShuttingDown && method != "exit") {
+		Logger::warn("Rejected method after shutdown: " + method);
+		if (msg.contains("id")) {
+			sendErrorResponse(msg["id"], -32600, "Server is shutting down");
+		}
+		return;
+	}
+
+	// --- Method dispatch ---
+
 	// معالجة طلب التهيئة
 	if (method == "initialize") {
+		if (state_ != ServerState::Uninitialized) {
+			Logger::warn("Duplicate initialize request rejected");
+			if (msg.contains("id")) {
+				sendErrorResponse(msg["id"], -32600, "Server already initialized");
+			}
+			return;
+		}
 		if (!msg.contains("id")) {
 			Logger::warn("Initialize request missing id field");
 			return;
@@ -124,8 +152,14 @@ void LSPServer::handleMessage(const json& msg) {
 			sendErrorResponse(msg["id"], -32602, "Initialize request missing params");
 			return;
 		}
-		// Pass both params and id
 		initialize(msg["params"], msg["id"]);
+		state_ = ServerState::Running;
+		Logger::info("Server state: Uninitialized -> Running");
+	}
+
+	// إشعار initialized من العميل
+	else if (method == "initialized") {
+		Logger::info("Client confirmed initialization — server fully operational");
 	}
 
 	else if (method == "shutdown") {
@@ -133,6 +167,8 @@ void LSPServer::handleMessage(const json& msg) {
 		if (msg.contains("id")) {
 			sendResponse({ {"jsonrpc", "2.0"}, {"id", msg["id"]}, {"result", nullptr} });
 		}
+		state_ = ServerState::ShuttingDown;
+		Logger::info("Server state: Running -> ShuttingDown");
 	}
 	else if (method == "exit") {
 		// Neovim is telling the process to exit.
