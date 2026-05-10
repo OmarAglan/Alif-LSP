@@ -121,8 +121,32 @@ void LSPServer::handleCompletion(const json& params, const json& id) {
 		return;
 	}
 
+	std::string documentText = docManager_.getDocumentText(uri);
+
+	// Extract the text of the current line (0-indexed)
+	std::string lineText = "";
+	int currentLine = 0;
+	size_t startPos = 0;
+	size_t pos = 0;
+	while ((pos = documentText.find('\n', startPos)) != std::string::npos) {
+		if (currentLine == line) {
+			lineText = documentText.substr(startPos, pos - startPos);
+			if (!lineText.empty() && lineText.back() == '\r') {
+				lineText.pop_back();
+			}
+			break;
+		}
+		startPos = pos + 1;
+		currentLine++;
+	}
+	if (currentLine == line && startPos < documentText.size()) {
+		lineText = documentText.substr(startPos);
+	}
+
+	CompletionContext ctx{ uri, line, character, lineText, documentText };
+
 	try {
-		json result = completionEngine_.getSuggestions();
+		json result = completionEngine_.getSuggestions(ctx);
 		sendResponse({ {"jsonrpc", "2.0"}, {"id", id}, {"result", result} });
 		Logger::debug("Completion request processed successfully for: " + uri);
 	}
