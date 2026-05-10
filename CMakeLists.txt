@@ -24,6 +24,17 @@ target_include_directories(alif-lsp PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src/third-party
 )
 
+# Version info accessible in code
+target_compile_definitions(alif-lsp PRIVATE
+    ALIF_LSP_VERSION="${PROJECT_VERSION}"
+)
+
+# Install target
+install(TARGETS alif-lsp DESTINATION bin)
+
+# Enable compile_commands.json for tooling
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+
 # Set compiler-specific flags
 if(MSVC)
     # Windows/MSVC: /utf-8 is required for Arabic characters in source files

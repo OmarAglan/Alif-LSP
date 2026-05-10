@@ -1,9 +1,7 @@
 #pragma once
 #include <vector>
 #include <string>
-#include "json.hpp"
-
-using json = nlohmann::json;
+#include "Types.h"
 
 struct CompletionContext {
 	std::string uri;

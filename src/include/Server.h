@@ -2,14 +2,12 @@
 #include <string>
 #include <functional>
 #include <unordered_map>
-#include "json.hpp"
+#include "Types.h"
 #include "Logger.h"
 #include "DocManager.h"
 #include "Completion.h"
 #include "Transport.h"
 #include <memory>
-
-using json = nlohmann::json;
 
 // حالات دورة حياة خادم LSP
 enum class ServerState {
