@@ -1,9 +1,6 @@
 #include "Completion.h"
-#include "DocManager.h"
 #include <vector>
 #include <string>
-
-extern DocumentManager docManager;
 
 
 json Completion::getSuggestions() {

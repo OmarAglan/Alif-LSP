@@ -1,6 +1,4 @@
 #include "Server.h"
-#include "DocManager.h"
-#include "Completion.h"
 #include "Logger.h"
 
 #include <iostream>
@@ -15,10 +13,6 @@
 #include <algorithm>
 #include <stdio.h>
 #include <fcntl.h>
-
-
-DocumentManager docManager;
-Completion completionEngine;
 
 void LSPServer::sendResponse(const json& response) {
 	std::string str = response.dump();
@@ -92,14 +86,14 @@ void LSPServer::handleCompletion(const json& params, const json& id) {
 	std::string uri = textDoc["uri"].get<std::string>();
 
 	// التحقق من وجود المستند في DocumentManager
-	if (!docManager.hasDocument(uri)) {
+	if (!docManager_.hasDocument(uri)) {
 		Logger::warn("Completion requested for unopened document: " + uri);
 		sendErrorResponse(id, -32603, "Document not found: " + uri);
 		return;
 	}
 
 	try {
-		json result = completionEngine.getSuggestions();
+		json result = completionEngine_.getSuggestions();
 		sendResponse({ {"id", id}, {"result", result} });
 		Logger::debug("Completion request processed successfully for: " + uri);
 	}
@@ -156,7 +150,7 @@ void LSPServer::handleMessage(const json& msg) {
 			Logger::warn("didOpen request has invalid textDocument structure");
 			return;
 		}
-		DocumentError result = docManager.openDocument(doc["uri"], doc["text"]);
+		DocumentError result = docManager_.openDocument(doc["uri"], doc["text"]);
 		if (result != DocumentError::SUCCESS) {
 			Logger::warn("Failed to open document " + doc["uri"].get<std::string>() +
 				": " + DocumentManager::errorToString(result));
@@ -183,7 +177,7 @@ void LSPServer::handleMessage(const json& msg) {
 			return;
 		}
 
-		DocumentError result = docManager.updateDocument(doc["uri"], changes[0]["text"]);
+		DocumentError result = docManager_.updateDocument(doc["uri"], changes[0]["text"]);
 		if (result != DocumentError::SUCCESS) {
 			Logger::warn("Failed to update document " + doc["uri"].get<std::string>() +
 				": " + DocumentManager::errorToString(result));
@@ -200,7 +194,7 @@ void LSPServer::handleMessage(const json& msg) {
 			Logger::warn("didClose request has invalid textDocument structure");
 			return;
 		}
-		DocumentError result = docManager.closeDocument(doc["uri"]);
+		DocumentError result = docManager_.closeDocument(doc["uri"]);
 		if (result != DocumentError::SUCCESS) {
 			Logger::warn("Failed to close document " + doc["uri"].get<std::string>() +
 				": " + DocumentManager::errorToString(result));
