@@ -15,6 +15,7 @@ add_executable(alif-lsp
     src/DocManager.cpp
     src/Logger.cpp
     src/Server.cpp
+    src/Transport.cpp
 )
 
 # Add include directories (headers and third-party)

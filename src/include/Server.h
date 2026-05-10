@@ -6,6 +6,8 @@
 #include "Logger.h"
 #include "DocManager.h"
 #include "Completion.h"
+#include "Transport.h"
+#include <memory>
 
 using json = nlohmann::json;
 
@@ -24,7 +26,7 @@ using NotificationHandler = std::function<void(const json& params)>;
 
 class LSPServer {
 public:
-	LSPServer();
+	explicit LSPServer(std::shared_ptr<Transport> transport);
 	int run();
 	void handleMessage(const json& msg);
 
@@ -34,6 +36,7 @@ private:
 	bool running_ = true;
 
 	// Server-owned components
+	std::shared_ptr<Transport> transport_;
 	DocumentManager docManager_;
 	Completion completionEngine_;
 

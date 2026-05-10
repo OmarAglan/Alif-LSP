@@ -1,23 +1,13 @@
 #include "Server.h"
 #include "Logger.h"
 
-#include <iostream>
-#include <fstream>
 #include <string>
-#include <cctype>
-#if defined(_WIN32)
-#define NOMINMAX
-#include <io.h>
-#include <windows.h>
-#endif
-#include <algorithm>
-#include <stdio.h>
-#include <fcntl.h>
+#include <vector>
 
 void LSPServer::sendResponse(const json& response) {
-	std::string str = response.dump();
-	std::cout << "Content-Length: " << str.size() << "\r\n\r\n" << str;
-	std::cout.flush();
+	if (transport_) {
+		transport_->writeMessage(response.dump());
+	}
 }
 
 // إرسال رد خطأ وفقاً لمعايير LSP
@@ -36,7 +26,8 @@ void LSPServer::sendErrorResponse(const json& id, int code, const std::string& m
 
 // --- Constructor & dispatch table registration ---
 
-LSPServer::LSPServer() {
+LSPServer::LSPServer(std::shared_ptr<Transport> transport)
+	: transport_(std::move(transport)) {
 	registerHandlers();
 }
 
@@ -317,109 +308,14 @@ bool LSPServer::isValidLSPMessage(const json& msg) {
 }
 
 int LSPServer::run() {
-#if defined(_WIN32)
-	// Set binary mode for stdin/stdout on Windows
-	int stdinInit = _setmode(_fileno(stdin), _O_BINARY);
-	int stdoutInit = _setmode(_fileno(stdout), _O_BINARY);
-	if (stdinInit == -1 or stdoutInit == -1) {
-		Logger::error("Fatal Error: Cannot set binary mode for stdin/stdout");
-		perror("Cannot set mode");
-		return -1;
-	}
-#endif
-
 	Logger::info("Alif Server Started");
 
-	while (running_) {
-		// قراءة رؤوس الرسالة مع التحقق من الصحة
-		std::string line;
-		size_t length = 0;
-		bool contentLengthFound = false;
+	while (running_ && transport_ && !transport_->isClosed()) {
+		auto msgStr = transport_->readMessage();
+		if (!msgStr) continue;
 
-		// قراءة الرؤوس حتى الوصول لسطر فارغ
-		bool headerRead = false;
-		while (std::getline(std::cin, line)) {
-			headerRead = true;
-			// إزالة الأحرف الإضافية من نهاية السطر
-			if (!line.empty() && line.back() == '\r') {
-				line.pop_back();
-			}
-
-			// البحث عن رأس Content-Length
-			if (line.find("Content-Length: ") == 0) {
-				std::string lengthStr = line.substr(16);
-
-				// التحقق من صحة القيمة الرقمية
-				try {
-					length = std::stoul(lengthStr);
-					contentLengthFound = true;
-
-					// التحقق من الحدود المعقولة للرسالة
-					if (length > 1024 * 1024) { // حد أقصى 1MB
-						Logger::warn("Message too large: " + std::to_string(length) + " bytes");
-						continue; // تجاهل الرسالة الكبيرة جداً
-					}
-					if (length == 0) {
-						Logger::warn("Empty message received (Content-Length: 0)");
-						continue;
-					}
-
-					Logger::debug("Content-Length: " + std::to_string(length));
-				}
-				catch (const std::exception& e) {
-					Logger::warn("Invalid Content-Length header: " + lengthStr);
-					continue; // تجاهل الرسالة مع رأس خاطئ
-				}
-			}
-
-			// نهاية الرؤوس
-			if (line.empty()) {
-				break;
-			}
-		}
-
-		// If we couldn't read any headers, the input stream is likely closed (Neovim exited)
-		if (!headerRead && std::cin.eof()) {
-			Logger::info("End of input stream reached. Exiting.");
-			break;
-		}
-
-		// التحقق من وجود رأس Content-Length
-		if (!contentLengthFound) {
-			Logger::warn("Message received without Content-Length header");
-			continue;
-		}
-
-		// قراءة محتوى الرسالة مع الحماية من الأخطاء
-		std::vector<char> buffer(length);
-		std::cin.read(buffer.data(), length);
-
-		// التحقق من نجاح القراءة
-		if (!std::cin) {
-			Logger::error("Failed to read message body (" + std::to_string(length) + " bytes)");
-			// محاولة استعادة الحالة
-			std::cin.clear();
-			continue;
-		}
-
-		// التحقق من قراءة البيانات كاملة
-		size_t bytesRead = std::cin.gcount();
-		if (bytesRead != length) {
-			Logger::warn("Incomplete message read: expected " + std::to_string(length) +
-				" bytes, got " + std::to_string(bytesRead));
-			continue;
-		}
-
-		// تحليل JSON مع معالجة محسنة للأخطاء
 		try {
-			// التحقق من أن البيانات ليست فارغة
-			if (buffer.empty()) {
-				Logger::warn("Empty message buffer received");
-				continue;
-			}
-
-			// تحليل JSON
-			json msg = json::parse(buffer.begin(), buffer.end());
+			json msg = json::parse(*msgStr);
 
 			// التحقق من أن الرسالة تحتوي على حقول أساسية
 			if (msg.is_null() || (!msg.is_object())) {
@@ -441,9 +337,8 @@ int LSPServer::run() {
 			Logger::error("JSON Parse Error at byte " + std::to_string(e.byte) +
 				": " + std::string(e.what()));
 
-			// إظهار جزء من البيانات المشكوكة للتشخيص
-			std::string preview(buffer.begin(), buffer.begin() + std::min(size_t(100), buffer.size()));
-			Logger::debug("Message preview: " + preview + (buffer.size() > 100 ? "..." : ""));
+			std::string preview = msgStr->substr(0, std::min(size_t(100), msgStr->size()));
+			Logger::debug("Message preview: " + preview + (msgStr->size() > 100 ? "..." : ""));
 		}
 		catch (const std::exception& e) {
 			Logger::error("Unexpected error during message processing: " + std::string(e.what()));
