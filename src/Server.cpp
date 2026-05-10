@@ -82,7 +82,11 @@ void LSPServer::handleInitialize(const json& params, const json& id) {
 		{"jsonrpc", "2.0"},
 		{"id", id},
 		{"result", {
-			{"capabilities", capabilities}
+			{"capabilities", capabilities},
+			{"serverInfo", {
+				{"name", "Alif-LSP"},
+				{"version", "0.0.1"}
+			}}
 		}}
 	});
 
