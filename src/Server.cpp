@@ -122,26 +122,7 @@ void LSPServer::handleCompletion(const json& params, const json& id) {
 	}
 
 	std::string documentText = docManager_.getDocumentText(uri);
-
-	// Extract the text of the current line (0-indexed)
-	std::string lineText = "";
-	int currentLine = 0;
-	size_t startPos = 0;
-	size_t pos = 0;
-	while ((pos = documentText.find('\n', startPos)) != std::string::npos) {
-		if (currentLine == line) {
-			lineText = documentText.substr(startPos, pos - startPos);
-			if (!lineText.empty() && lineText.back() == '\r') {
-				lineText.pop_back();
-			}
-			break;
-		}
-		startPos = pos + 1;
-		currentLine++;
-	}
-	if (currentLine == line && startPos < documentText.size()) {
-		lineText = documentText.substr(startPos);
-	}
+	std::string lineText = docManager_.getLineText(uri, line);
 
 	CompletionContext ctx{ uri, line, character, lineText, documentText };
 
@@ -178,7 +159,8 @@ void LSPServer::handleDidOpen(const json& params) {
 		Logger::warn("didOpen notification has invalid textDocument structure");
 		return;
 	}
-	DocumentError result = docManager_.openDocument(doc["uri"], doc["text"]);
+	int version = doc.contains("version") ? doc["version"].get<int>() : 0;
+	DocumentError result = docManager_.openDocument(doc["uri"], doc["text"], version);
 	if (result != DocumentError::SUCCESS) {
 		Logger::warn("Failed to open document " + doc["uri"].get<std::string>() +
 			": " + DocumentManager::errorToString(result));
@@ -204,7 +186,8 @@ void LSPServer::handleDidChange(const json& params) {
 		return;
 	}
 
-	DocumentError result = docManager_.updateDocument(doc["uri"], changes[0]["text"]);
+	int version = doc.contains("version") ? doc["version"].get<int>() : docManager_.getDocumentVersion(doc["uri"]) + 1;
+	DocumentError result = docManager_.updateDocument(doc["uri"], changes[0]["text"], version);
 	if (result != DocumentError::SUCCESS) {
 		Logger::warn("Failed to update document " + doc["uri"].get<std::string>() +
 			": " + DocumentManager::errorToString(result));
